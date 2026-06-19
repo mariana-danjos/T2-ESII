@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  title: Plus Gestão — Microsserviço de Fornecedores
+  description: |
+    API do microsserviço de Fornecedores do sistema Plus Gestão.
+    Este serviço é responsável pelo cadastro e gerenciamento de fornecedores,
+    vínculo com produtos e histórico de reposições.
+  version: 1.0.0
+  contact:
+    name: Grupo IT Girls — Equipe Fornecedores
+  license:
+    name: Uso interno — ES2
+servers:
+  - url: http://localhost:3002
+    description: Servidor de desenvolvimento local
+  openapi: 3.0.3
+
+  # Replaced with canonical suppliers OpenAPI
+
+  <<: *root
+        orderId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        quantity: { type: integer }
+        unitCost: { type: number, format: double, nullable: true }
+    ReplenishmentOrderResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid }
+        status: { type: string, enum: [requested, sent, received, cancelled] }
+        totalCost: { type: number, format: double, nullable: true }
+        orderedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReplenishmentItemResponse' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+        details: {}
