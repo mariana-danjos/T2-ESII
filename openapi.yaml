@@ -1,0 +1,871 @@
+openapi: 3.0.3
+info:
+  title: Plus Gestão — Microsserviço de Fornecedores
+  description: |
+    API do microsserviço de Fornecedores do sistema Plus Gestão.
+    Este serviço é responsável pelo **cadastro e gerenciamento de fornecedores**,
+    vínculo com produtos e histórico de reposições.
+    ### Dependências externas
+    - **Autenticação JWT**: protege as rotas
+    - **MS Produtos**: fornece `productId` para vínculo de produtos
+    ### Serviços que nos consomem
+    - **MS Estoque**: usa fornecedores para reposição e rastreabilidade
+    - **MS Compras**: consulta fornecedores e vínculos com produtos
+  version: 1.0.0
+  contact:
+    name: Grupo IT Girls — Equipe Fornecedores
+  license:
+    name: Uso interno — ES2
+servers:
+  - url: http://localhost:3002
+    description: Servidor de desenvolvimento local
+  - url: http://ms-estoque-main:3002
+    description: Servidor Docker (rede interna)
+tags:
+  - name: Fornecedores
+    description: CRUD e busca de fornecedores
+  - name: Produtos do Fornecedor
+    description: Vínculo de fornecedores com produtos
+  - name: Reposição
+    description: Registro e histórico de reposições
+paths:
+  /suppliers:
+    post:
+      tags: [Fornecedores]
+      summary: Criar um novo fornecedor
+      description: Cria um fornecedor no cadastro. O fornecedor nasce como `active` por padrão.
+      operationId: createSupplier
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierCreateRequest'
+            example:
+              legalName: "Plus Fashion LTDA"
+              tradeName: "Plus Fashion"
+              document: "11.222.333/0001-81"
+              email: "contato@plusfashion.com"
+              phone: "+55 51 99999-0000"
+              contactPerson: "Maria Silva"
+              address:
+                street: "Av. Ipiranga"
+                number: "6681"
+                district: "Partenon"
+                city: "Porto Alegre"
+                state: "RS"
+                zipCode: "90619-900"
+                country: "Brasil"
+      responses:
+        '201':
+          description: Fornecedor criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierResponse'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Documento duplicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Fornecedores]
+      summary: Listar fornecedores
+      description: Retorna uma lista paginada de fornecedores.
+      operationId: listSuppliers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          description: Filtrar por status ativo/inativo
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: city
+          in: query
+          description: Filtrar por cidade
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: Filtrar por estado
+          schema:
+            type: string
+        - name: productId
+          in: query
+          description: Filtrar fornecedores vinculados a um produto
+          schema:
+            type: string
+            format: uuid
+        - name: q
+          in: query
+          description: Busca textual por razão social, nome fantasia ou documento
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de fornecedores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSupplierResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /suppliers/{id}:
+    get:
+      tags: [Fornecedores]
+      summary: Buscar fornecedor por ID
+      description: Retorna os dados completos de um fornecedor.
+      operationId: getSupplierById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      responses:
+        '200':
+          description: Fornecedor encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Fornecedores]
+      summary: Atualizar um fornecedor
+      description: Atualiza os dados de um fornecedor existente.
+      operationId: updateSupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierUpdateRequest'
+            example:
+              tradeName: "Plus Fashion Premium"
+              status: "inactive"
+      responses:
+        '200':
+          description: Fornecedor atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierResponse'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [Fornecedores]
+      summary: Atualizar parcialmente um fornecedor
+      description: Alias de atualização parcial para compatibilidade com clientes legados.
+      operationId: patchSupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierUpdateRequest'
+      responses:
+        '200':
+          description: Fornecedor atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierResponse'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Fornecedores]
+      summary: Inativar um fornecedor
+      description: Inativa um fornecedor sem removê-lo do banco.
+      operationId: inactivateSupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      responses:
+        '200':
+          description: Fornecedor inativado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /suppliers/{id}/products:
+    post:
+      tags: [Produtos do Fornecedor]
+      summary: Vincular produto ao fornecedor
+      description: Cria o vínculo entre um fornecedor e um produto.
+      operationId: linkSupplierProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierProductLinkRequest'
+            example:
+              productId: "prod-123"
+              supplyPrice: 49.9
+              leadTimeDays: 7
+              supplierSku: "SKU-001"
+      responses:
+        '201':
+          description: Vínculo criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierProductResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Vínculo já existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Produtos do Fornecedor]
+      summary: Listar produtos vinculados ao fornecedor
+      description: Retorna todos os vínculos de produtos de um fornecedor.
+      operationId: listSupplierProducts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      responses:
+        '200':
+          description: Lista de vínculos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierProductResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /suppliers/{id}/products/{productId}:
+    delete:
+      tags: [Produtos do Fornecedor]
+      summary: Desvincular produto do fornecedor
+      description: Remove o vínculo entre um fornecedor e um produto.
+      operationId: unlinkSupplierProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+        - $ref: '#/components/parameters/ProductIdParam'
+      responses:
+        '204':
+          description: Vínculo removido com sucesso
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vínculo não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /products/{productId}/suppliers:
+    get:
+      tags: [Produtos do Fornecedor]
+      summary: Listar fornecedores de um produto
+      description: Retorna todos os fornecedores vinculados a um produto.
+      operationId: listProductSuppliers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductIdParam'
+      responses:
+        '200':
+          description: Lista de fornecedores vinculados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierProductResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /suppliers/{id}/replenishments:
+    post:
+      tags: [Reposição]
+      summary: Registrar reposição
+      description: Cria um pedido de reposição para um fornecedor.
+      operationId: createReplenishment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplenishmentCreateRequest'
+            example:
+              status: "requested"
+              items:
+                - productId: "prod-123"
+                  quantity: 10
+                  unitCost: 25.5
+      responses:
+        '201':
+          description: Reposição registrada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplenishmentOrderResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Reposição]
+      summary: Histórico de reposições do fornecedor
+      description: Retorna o histórico de reposições de um fornecedor com filtros opcionais.
+      operationId: listReplenishmentsBySupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdParam'
+        - name: status
+          in: query
+          description: Filtrar por status da reposição
+          schema:
+            type: string
+            enum: [requested, sent, received, cancelled]
+        - name: from
+          in: query
+          description: Data inicial em formato date-time
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Data final em formato date-time
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista de reposições
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReplenishmentOrderResponse'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fornecedor não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SupplierIdParam:
+      name: id
+      in: path
+      required: true
+      description: ID do fornecedor
+      schema:
+        type: string
+        format: uuid
+    ProductIdParam:
+      name: productId
+      in: path
+      required: true
+      description: ID do produto
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      description: Número da página (começa em 1)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: pageSize
+      in: query
+      description: Quantidade de itens por página
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  schemas:
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          nullable: true
+        number:
+          type: string
+          nullable: true
+        complement:
+          type: string
+          nullable: true
+        district:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+    SupplierCreateRequest:
+      type: object
+      required: [legalName, document, email]
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Razão social do fornecedor
+          example: "Plus Fashion LTDA"
+        tradeName:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: Nome fantasia do fornecedor
+          example: "Plus Fashion"
+        document:
+          type: string
+          description: CPF ou CNPJ do fornecedor
+          example: "11.222.333/0001-81"
+        email:
+          type: string
+          format: email
+          description: E-mail principal de contato
+          example: "contato@plusfashion.com"
+        phone:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: Telefone de contato
+          example: "+55 51 99999-0000"
+        contactPerson:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: Pessoa de contato
+          example: "Maria Silva"
+        address:
+          $ref: '#/components/schemas/Address'
+    SupplierUpdateRequest:
+      type: object
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        tradeName:
+          type: string
+          maxLength: 255
+          nullable: true
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          maxLength: 40
+          nullable: true
+        contactPerson:
+          type: string
+          maxLength: 255
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        address:
+          $ref: '#/components/schemas/Address'
+    SupplierResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "id1"
+        legalName:
+          type: string
+          example: "Plus Fashion LTDA"
+        tradeName:
+          type: string
+          nullable: true
+          example: "Plus Fashion"
+        document:
+          type: string
+          example: "11222333000181"
+        documentType:
+          type: string
+          enum: [cnpj, cpf]
+          example: cnpj
+        email:
+          type: string
+          example: "contato@plusfashion.com"
+        phone:
+          type: string
+          nullable: true
+          example: "+55 51 99999-0000"
+        contactPerson:
+          type: string
+          nullable: true
+          example: "Maria Silva"
+        status:
+          type: string
+          enum: [active, inactive]
+          example: active
+        address:
+          $ref: '#/components/schemas/Address'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PaginatedSupplierResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierResponse'
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 1
+    SupplierProductLinkRequest:
+      type: object
+      required: [productId]
+      properties:
+        productId:
+          type: string
+          format: uuid
+          description: ID do produto
+          example: "prod-123"
+        supplyPrice:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+          description: Preço de fornecimento
+          example: 49.9
+        leadTimeDays:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Prazo de entrega em dias
+          example: 7
+        supplierSku:
+          type: string
+          maxLength: 120
+          nullable: true
+          description: SKU do fornecedor
+          example: "SKU-001"
+    SupplierProductResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        supplierId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        supplyPrice:
+          type: number
+          format: double
+          nullable: true
+        leadTimeDays:
+          type: integer
+          nullable: true
+        supplierSku:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    ReplenishmentItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        unitCost:
+          type: number
+          format: double
+          nullable: true
+    ReplenishmentCreateRequest:
+      type: object
+      required: [items]
+      properties:
+        status:
+          type: string
+          enum: [requested, sent, received, cancelled]
+          default: requested
+        orderedAt:
+          type: string
+          format: date-time
+          nullable: true
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+              unitCost:
+                type: number
+                format: double
+                minimum: 0
+                nullable: true
+    ReplenishmentOrderResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        supplierId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [requested, sent, received, cancelled]
+        totalCost:
+          type: number
+          format: double
+          nullable: true
+        orderedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReplenishmentItemResponse'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Fornecedor não encontrado"
+        details:
+          nullable: true
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Operação realizada com sucesso"
