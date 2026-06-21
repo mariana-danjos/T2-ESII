@@ -1,0 +1,835 @@
+openapi: 3.0.3
+info:
+  title: Plus Gestão — Microsserviço de Fornecedores
+  description: |
+    API do microsserviço de Fornecedores do sistema Plus Gestão.
+
+    Responsável pelo cadastro e gerenciamento de fornecedores, vínculo com produtos
+    do catálogo e histórico de pedidos de reposição de estoque.
+
+    **Autenticação:** todas as rotas (exceto `/health`) exigem um JWT válido no header
+    `Authorization: Bearer <token>`, emitido pelo MS Auth (`chave-ms-auth`).
+    Operações de escrita (POST, PUT, PATCH, DELETE) exigem adicionalmente uma das roles
+    `admin` ou `gestor` no claim `roles` do token (quando `RBAC_ENFORCE=true`).
+  version: 1.0.0
+  contact:
+    name: Grupo IT Girls — Equipe Fornecedores
+  license:
+    name: Uso interno — ES2 PUCRS 2026/1
+
+servers:
+  - url: http://localhost:3002
+    description: Desenvolvimento local
+  - url: http://localhost:4566/restapis/{gatewayId}/dev/_user_request_
+    description: API Gateway (Ministack)
+    variables:
+      gatewayId:
+        default: placeholder
+        description: ID do API Gateway gerado pelo Terraform
+
+tags:
+  - name: health
+    description: Verificação de disponibilidade
+  - name: suppliers
+    description: Cadastro e gestão de fornecedores
+  - name: supplier-products
+    description: Vínculo entre fornecedores e produtos do catálogo
+  - name: replenishments
+    description: Pedidos de reposição de estoque
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      description: Retorna `{ status "ok" }` se o serviço está no ar. Não exige autenticação.
+      security: []
+      responses:
+        '200':
+          description: Serviço disponível
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /suppliers:
+    get:
+      tags: [suppliers]
+      summary: Listar fornecedores
+      description: Retorna lista paginada de fornecedores com filtros opcionais.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SupplierStatus'
+        - name: city
+          in: query
+          description: Filtro parcial por cidade (case-insensitive)
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: Filtro exato por UF (ex. RS, SP)
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Busca textual em razão social, nome fantasia ou documento
+          schema:
+            type: string
+        - name: productId
+          in: query
+          description: Retorna apenas fornecedores vinculados a este produto
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista paginada de fornecedores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSupplier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [suppliers]
+      summary: Cadastrar fornecedor
+      description: Cria um novo fornecedor. O documento (CNPJ ou CPF) deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupplierRequest'
+            example:
+              legalName: Moda Grande Ltda
+              tradeName: MG Moda
+              document: "12.345.678/0001-95"
+              email: contato@modagrande.com.br
+              phone: "(51) 3333-4444"
+              contactPerson: Ana Lima
+              address:
+                street: Rua das Flores
+                number: "100"
+                district: Centro
+                city: Porto Alegre
+                state: RS
+                zipCode: "90010-000"
+                country: Brasil
+      responses:
+        '201':
+          description: Fornecedor criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /suppliers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [suppliers]
+      summary: Buscar fornecedor por ID
+      responses:
+        '200':
+          description: Fornecedor encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [suppliers]
+      summary: Atualizar fornecedor (substituição total dos campos editáveis)
+      description: O documento não pode ser alterado após o cadastro.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSupplierRequest'
+      responses:
+        '200':
+          description: Fornecedor atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [suppliers]
+      summary: Atualizar fornecedor (campos parciais)
+      description: Apenas os campos enviados no body são atualizados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSupplierRequest'
+      responses:
+        '200':
+          description: Fornecedor atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [suppliers]
+      summary: Inativar fornecedor (soft delete)
+      description: |
+        Define `status = inactive`. O registro não é removido do banco —
+        pode ser reativado via PATCH `{ "status": "active" }`.
+      responses:
+        '200':
+          description: Fornecedor inativado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /suppliers/{id}/products:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID do fornecedor
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [supplier-products]
+      summary: Listar produtos vinculados ao fornecedor
+      responses:
+        '200':
+          description: Lista de vínculos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierProduct'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [supplier-products]
+      summary: Vincular produto ao fornecedor
+      description: O par `(supplierId, productId)` deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkProductRequest'
+            example:
+              productId: produto-uuid-aqui
+              supplyPrice: 49.90
+              leadTimeDays: 7
+              supplierSku: SKU-MG-001
+      responses:
+        '201':
+          description: Vínculo criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierProduct'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /suppliers/{id}/products/{productId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID do fornecedor
+        schema:
+          type: string
+          format: uuid
+      - name: productId
+        in: path
+        required: true
+        description: ID do produto a desvincular
+        schema:
+          type: string
+
+    delete:
+      tags: [supplier-products]
+      summary: Desvincular produto do fornecedor
+      responses:
+        '204':
+          description: Vínculo removido
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /products/{productId}/suppliers:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        description: ID do produto
+        schema:
+          type: string
+
+    get:
+      tags: [supplier-products]
+      summary: Listar fornecedores de um produto
+      description: Retorna todos os vínculos `supplier_products` onde `product_id` bate.
+      responses:
+        '200':
+          description: Lista de vínculos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierProduct'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /suppliers/{id}/replenishments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID do fornecedor
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [replenishments]
+      summary: Listar pedidos de reposição do fornecedor
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ReplenishmentStatus'
+        - name: from
+          in: query
+          description: Data mínima de `orderedAt` (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Data máxima de `orderedAt` (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista de pedidos de reposição
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReplenishmentOrder'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [replenishments]
+      summary: Registrar pedido de reposição
+      description: Cria um pedido com um ou mais itens em uma única transação.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReplenishmentRequest'
+            example:
+              status: requested
+              items:
+                - productId: produto-uuid-aqui
+                  quantity: 50
+                  unitCost: 39.90
+                - productId: outro-produto-uuid
+                  quantity: 20
+      responses:
+        '201':
+          description: Pedido de reposição criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplenishmentOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT emitido pelo MS Auth (`chave-ms-auth`)
+
+  responses:
+    BadRequest:
+      description: Dados inválidos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Dados inválidos
+            details:
+              fieldErrors:
+                email: ["E-mail inválido"]
+    Unauthorized:
+      description: Token ausente ou inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Não autenticado
+    Forbidden:
+      description: Sem permissão para a operação
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Escrita requer perfil admin ou gestor
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Fornecedor não encontrado
+    Conflict:
+      description: Conflito — registro duplicado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Já existe fornecedor com este documento
+
+  schemas:
+    SupplierStatus:
+      type: string
+      enum: [active, inactive]
+      description: "`active` — fornecedor ativo; `inactive` — inativado (soft delete)"
+
+    DocumentType:
+      type: string
+      enum: [cnpj, cpf]
+
+    ReplenishmentStatus:
+      type: string
+      enum: [requested, sent, received, cancelled]
+      description: |
+        - `requested` — pedido solicitado (padrão)
+        - `sent` — pedido enviado ao fornecedor
+        - `received` — mercadoria recebida
+        - `cancelled` — pedido cancelado
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          nullable: true
+          maxLength: 255
+          example: Rua das Flores
+        number:
+          type: string
+          nullable: true
+          maxLength: 20
+          example: "100"
+        complement:
+          type: string
+          nullable: true
+          maxLength: 255
+          example: Sala 2
+        district:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: Centro
+        city:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: Porto Alegre
+        state:
+          type: string
+          nullable: true
+          maxLength: 60
+          example: RS
+        zipCode:
+          type: string
+          nullable: true
+          maxLength: 20
+          example: "90010-000"
+        country:
+          type: string
+          nullable: true
+          maxLength: 60
+          example: Brasil
+
+    Supplier:
+      type: object
+      required: [id, legalName, document, documentType, email, status, address, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        legalName:
+          type: string
+          maxLength: 255
+          example: Moda Grande Ltda
+        tradeName:
+          type: string
+          nullable: true
+          maxLength: 255
+          example: MG Moda
+        document:
+          type: string
+          description: CPF (11 dígitos) ou CNPJ (14 dígitos), somente dígitos
+          example: "12345678000195"
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        email:
+          type: string
+          format: email
+          example: contato@modagrande.com.br
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+          example: "(51) 3333-4444"
+        contactPerson:
+          type: string
+          nullable: true
+          maxLength: 255
+          example: Ana Lima
+        status:
+          $ref: '#/components/schemas/SupplierStatus'
+        address:
+          $ref: '#/components/schemas/Address'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    PaginatedSupplier:
+      type: object
+      required: [data, page, pageSize, total]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supplier'
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          description: Total de registros (para cálculo de páginas)
+          example: 42
+
+    CreateSupplierRequest:
+      type: object
+      required: [legalName, document, email]
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        tradeName:
+          type: string
+          nullable: true
+          maxLength: 255
+        document:
+          type: string
+          description: |
+            CPF ou CNPJ — aceita formatado (`123.456.789-09`) ou somente dígitos.
+            O serviço valida o dígito verificador e classifica automaticamente.
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+        contactPerson:
+          type: string
+          nullable: true
+          maxLength: 255
+        address:
+          $ref: '#/components/schemas/Address'
+
+    UpdateSupplierRequest:
+      type: object
+      description: Todos os campos são opcionais. Apenas os campos enviados são atualizados (PATCH) ou substituídos (PUT).
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        tradeName:
+          type: string
+          nullable: true
+          maxLength: 255
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+        contactPerson:
+          type: string
+          nullable: true
+          maxLength: 255
+        status:
+          $ref: '#/components/schemas/SupplierStatus'
+        address:
+          $ref: '#/components/schemas/Address'
+
+    SupplierProduct:
+      type: object
+      required: [id, supplierId, productId, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        supplierId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          description: Referência opaca ao produto no catálogo (sem FK cross-service)
+        supplyPrice:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          example: 49.90
+        leadTimeDays:
+          type: integer
+          nullable: true
+          minimum: 0
+          example: 7
+        supplierSku:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: SKU-MG-001
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    LinkProductRequest:
+      type: object
+      required: [productId]
+      properties:
+        productId:
+          type: string
+          minLength: 1
+        supplyPrice:
+          type: number
+          nullable: true
+          minimum: 0
+        leadTimeDays:
+          type: integer
+          nullable: true
+          minimum: 0
+        supplierSku:
+          type: string
+          nullable: true
+          maxLength: 120
+
+    ReplenishmentItem:
+      type: object
+      required: [id, orderId, productId, quantity]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        orderId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        unitCost:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+
+    ReplenishmentOrder:
+      type: object
+      required: [id, supplierId, status, orderedAt, items, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        supplierId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ReplenishmentStatus'
+        totalCost:
+          type: number
+          format: double
+          nullable: true
+          description: Soma de `quantity × unitCost` de todos os itens (calculado pelo serviço)
+        orderedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReplenishmentItem'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateReplenishmentRequest:
+      type: object
+      required: [items]
+      properties:
+        status:
+          $ref: '#/components/schemas/ReplenishmentStatus'
+        orderedAt:
+          type: string
+          format: date-time
+          description: Data do pedido (padrão: `now()`)
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId:
+                type: string
+                minLength: 1
+              quantity:
+                type: integer
+                minimum: 1
+              unitCost:
+                type: number
+                nullable: true
+                minimum: 0
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          description: Detalhes adicionais (ex. erros de validação por campo)
