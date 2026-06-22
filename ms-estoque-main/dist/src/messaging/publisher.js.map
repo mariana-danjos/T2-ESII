@@ -1,0 +1,1 @@
+{"version":3,"file":"publisher.js","sourceRoot":"","sources":["../../../src/messaging/publisher.ts"],"names":[],"mappings":";;;AASA,MAAa,aAAa;IAA1B;QACS,cAAS,GAAkB,EAAE,CAAC;IAIvC,CAAC;IAHC,KAAK,CAAC,OAAO,CAAC,IAAY,EAAE,OAAgB;QAC1C,IAAI,CAAC,SAAS,CAAC,IAAI,CAAC,EAAE,IAAI,EAAE,OAAO,EAAE,CAAC,CAAC;IACzC,CAAC;CACF;AALD,sCAKC"}
