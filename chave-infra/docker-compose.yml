@@ -149,8 +149,8 @@ services:
       context: ../chave-shell
       dockerfile: Dockerfile
       args:
-        - MFE_AUTH_URL=http://localhost:4001/assets/remoteEntry.js
-        - MFE_SUPPLIER_URL=http://localhost:4002/assets/remoteEntry.js
+        - MFE_AUTH_URL=${MFE_AUTH_URL:-http://localhost:4001/assets/remoteEntry.js}
+        - MFE_SUPPLIER_URL=${MFE_SUPPLIER_URL:-http://localhost:4002/assets/remoteEntry.js}
     container_name: chave-shell
     ports:
       - "${SHELL_PORT:-3000}:3000"
